@@ -110,74 +110,7 @@ pm2 save && pm2 startup   # survive reboots
 
 `pm2 startup` will print a `sudo` command — run it. If things crash, check `pm2 logs <name> --lines 30`. The most common mistake is `exec cwd` pointing to the wrong place — verify with `pm2 describe ffl-renderer | grep cwd`.
 
-### 5. NNID database (optional)
-
-This enables `/mii_data/{nnid}`. ariankordi scraped every NNID online on the Wii U friend presence server on April 8, 2024, so it covers NNIDs up to that date (including deleted ones).
-
-**Install MariaDB:**
-
-```bash
-sudo apt install -y mariadb-server
-sudo systemctl enable --now mariadb
-```
-
-**Get the dump** (raw MariaDB data directory from MEGA):
-
-`https://mega.nz/file/SboWHRrK#_5vuSzFAkyvz9lGy7RBqwAh3CN0OHCRQ9AbYn-Kd09s`
-
-**Set it up:**
-
-```bash
-sudo mkdir -p /mnt/mii-db
-# Copy the inner folder's contents (the dump is nested one level deep)
-sudo mv /path/to/2024-06-04-mii-data-map-database-again-mysql/2024-06-04-mii-data-map-database-again-mysql/* /mnt/mii-db/
-sudo chown -R mysql:mysql /mnt/mii-db
-sudo chmod 750 /mnt/mii-db
-```
-
-Verify you see `miis/`, `ibdata1`, `ib_logfile0`, etc. directly in `/mnt/mii-db/` — not inside another subfolder.
-
-**Point MariaDB at it:**
-
-```bash
-# /etc/mysql/mariadb.conf.d/99-mii.cnf
-[mariadbd]
-datadir = /mnt/mii-db
-innodb_log_file_size = 256M
-innodb_buffer_pool_size = 1G
-```
-
-```bash
-sudo systemctl restart mariadb
-```
-
-If it won't start, try deleting the old InnoDB logs — they'll be recreated:
-
-```bash
-sudo rm /mnt/mii-db/ib_logfile0 /mnt/mii-db/ib_logfile1 2>/dev/null
-sudo systemctl restart mariadb
-```
-
-**Create the user:**
-
-```bash
-sudo mariadb -e "CREATE USER IF NOT EXISTS 'miis'@'localhost' IDENTIFIED BY 'miis'; GRANT ALL ON miis.* TO 'miis'@'localhost'; FLUSH PRIVILEGES;"
-```
-
-**Connect the frontend:**
-
-```bash
-pm2 delete ffl-frontend
-pm2 start /home/YOUR_USER/nwf-mii-cemu-toy/ffl-frontend \
-  --name ffl-frontend --cwd /home/YOUR_USER/nwf-mii-cemu-toy \
-  -- -upstream localhost:12346 -host :8080 \
-     -nnid-to-mii-map-db "miis:miis@unix(/run/mysqld/mysqld.sock)/miis?parseTime=true"
-pm2 save
-```
-
-If the raw datadir doesn't work with your MariaDB version, boot it once with the dump, export to SQL, then import normally — see the [full guide](#if-the-raw-datadir-doesnt-work) below.
-
-### 6. HTTPS
+### 5. HTTPS
 
 The frontend uses `crypto.subtle` (Miitomo data decryption) and `navigator.clipboard` (copy button). Both require a secure context — HTTPS or localhost. Over plain HTTP at a non-localhost IP, you'll get `Cannot read properties of undefined (reading 'importKey')`.
 
@@ -218,7 +151,7 @@ server {
 
 Then add `-use-x-forwarded-for` to the frontend flags.
 
-### 7. Test it
+### 6. Test it
 
 ```bash
 # Render test
